@@ -1,0 +1,11 @@
+# Python environment
+venv/
+*.pyc
+__pycache__/
+
+# Database & local settings
+db.sqlite3
+.env
+
+# Media files (Will be generated locally)
+media/generated_audio/
