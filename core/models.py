@@ -17,9 +17,11 @@ class Character(models.Model):
     )
     
     # Media assets
-    avatar = models.ImageField(upload_to='characters/avatars/', help_text="Character portrait image")
+    avatar = models.ImageField(upload_to='characters/avatars/', blank=True, null=True, help_text="Character portrait image")
     voice_sample = models.FileField(
         upload_to='characters/voices/', 
+        blank=True, 
+        null=True,
         help_text="Clean 6-10 second .wav file of character speaking (for voice cloning)"
     )
     
