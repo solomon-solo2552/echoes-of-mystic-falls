@@ -18,9 +18,11 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from core.views import character_list as get_characters
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/characters/', get_characters, name='get_characters'),
 ]
 
 # Serve media files in development
