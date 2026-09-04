@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-:root {
+/* :root {
   --background: #ffffff;
   --foreground: #171717;
 }
@@ -23,4 +23,19 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+} */
+
+@theme {
+  --color-mystic-dark: #0a0a0c;
+  --color-mystic-card: #16161a;
+  --color-mystic-red: #990000;
+  --color-mystic-crimson: #cc0000;
+  --color-mystic-gold: #d4af37;
+}
+
+body {
+  background-color: var(--color-mystic-dark);
+  color: #f3f4f6;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  min-height: 100vh;
 }
