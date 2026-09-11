@@ -224,4 +224,4 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
       </form>
     </div>
   );
-}Hey 
+}
