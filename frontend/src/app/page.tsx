@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Character } from '@/types/character';
 import { CharacterCard } from '@/components/CharacterCard';
+import ChatWindow from '@/components/ChatWindow';
 
 export default function Home() {
   const [characters, setCharacters] = useState<Character[]>([]);

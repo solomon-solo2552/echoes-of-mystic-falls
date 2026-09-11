@@ -9,3 +9,4 @@ db.sqlite3
 
 # Media files (Will be generated locally)
 media/generated_audio/
+.env

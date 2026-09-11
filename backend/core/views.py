@@ -1,5 +1,7 @@
 from django.shortcuts import render
 import uuid
+import traceback
+from django.http import JsonResponse
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from .models import Character
@@ -51,4 +53,8 @@ def synthesize_speech(request):
     except Character.DoesNotExist:
         return Response({'error': 'Character not found'}, status=404)
     except Exception as e:
+        print("\n" + "="*60)
+        print("FULL TRACEBACK FOR PYTHON 3.14 DEBUGGING:")
+        traceback.print_exc()
+        print("="*60 + "\n")
         return Response({'error': str(e)}, status=500)

@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'rest_framework',  # Django REST Framework for API endpoints
     'corsheaders',  # For handling Cross-Origin Resource Sharing (CORS)
     'core',  # Custom app for character management
+    'chat',  # Custom app for chat functionality
 ]
 
 MIDDLEWARE = [

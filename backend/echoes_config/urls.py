@@ -24,6 +24,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/characters/', get_characters, name='get_characters'),
     path('api/synthesize/', synthesize_speech, name='synthesize_speech'),
+    path('api/chat/', include('chat.urls')),  # Include chat app URLs
 ]
 
 # Serve media files in development
