@@ -23,18 +23,18 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
-  // Formatting display name from slug (e.g., "damon-salvatore" -> "Damon Salvatore")
+  // Format display name from slug (e.g., "damon-salvatore" -> "Damon Salvatore")
   const formattedName = characterSlug
     .split('-')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 
-  // Auto-scroll to the latest message
+  // Auto-scroll to latest message
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  // Clean up audio playback on unmount
+  // Clean up audio on unmount
   useEffect(() => {
     return () => {
       if (activeAudioRef.current) {
@@ -73,7 +73,7 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputMessage.trim() || loading) return;
+    if (!inputMessage.trim() || loading || playingAudioId !== null) return;
 
     const userText = inputMessage;
     setInputMessage('');
@@ -97,12 +97,11 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
       }
 
       const data = await response.json();
-
       const botMsgId = Date.now() + 1;
       const characterMsg: Message = {
         id: botMsgId,
         sender: 'character',
-        text: data.response || data.reply_text || 'No response returned.',
+        text: data.reply_text || data.response || 'No response returned.',
         audioUrl: data.audio_url,
       };
 
@@ -126,9 +125,11 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
     }
   };
 
+  const isSpeaking = playingAudioId !== null;
+
   return (
-    <div className="bg-[#16161a] border border-gray-800 rounded-2xl p-6 shadow-2xl flex flex-col h-[650px] w-full text-left">
-      {/* Header */}
+    <div className="bg-[#16161a] border border-gray-800 rounded-2xl p-6 shadow-2xl flex flex-col h-[700px] w-full text-left">
+      {/* Top Header Bar */}
       <div className="border-b border-gray-800 pb-4 mb-4 flex justify-between items-center">
         <div>
           <h2 className="text-xl font-bold text-white">
@@ -140,26 +141,68 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
         </div>
         <Link
           href="/"
-          className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-xs font-semibold rounded-lg transition-colors"
+          className="px-3 py-1.5 bg-red-950/60 hover:bg-red-900 border border-red-800 text-red-200 text-xs font-semibold rounded-lg transition-colors"
         >
-          ← End Call
+          🔴 End Call
         </Link>
       </div>
 
-      {/* Simulated Video/Audio Status Banner */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs text-gray-300 font-medium">Interactive Voice Session Active</span>
+      {/* Day 8 Visualizer Header Banner */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4 flex items-center gap-4">
+        {/* Dynamic Pulsing Ring around Avatar */}
+        <div className="relative flex items-center justify-center">
+          {isSpeaking && (
+            <>
+              <span className="absolute inline-flex h-14 w-14 rounded-full bg-[#cc0000] opacity-75 animate-ping" />
+              <span className="absolute inline-flex h-12 w-12 rounded-full bg-[#cc0000] opacity-40 animate-pulse" />
+            </>
+          )}
+          <div className="relative z-10 w-12 h-12 rounded-full bg-zinc-800 border-2 border-[#cc0000] flex items-center justify-center text-white font-bold text-lg overflow-hidden shadow-lg">
+            {formattedName.charAt(0)}
+          </div>
         </div>
-        <span className="text-xs text-gray-500 font-mono">127.0.0.1:8000</span>
+
+        {/* Real-time Status and Animated Audio Waves */}
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <span
+              className={`w-2.5 h-2.5 rounded-full ${
+                isSpeaking
+                  ? 'bg-[#cc0000] animate-bounce'
+                  : loading
+                  ? 'bg-amber-500 animate-pulse'
+                  : 'bg-emerald-500'
+              }`}
+            />
+            <span className="text-xs font-medium text-gray-200">
+              {isSpeaking
+                ? `${formattedName} is speaking...`
+                : loading
+                ? 'Synthesizing voice & thoughts...'
+                : 'Call Connected'}
+            </span>
+          </div>
+
+          {isSpeaking ? (
+            <div className="flex items-end gap-1 h-3 mt-1.5">
+              <div className="w-1 bg-[#cc0000] animate-[ping_0.8s_infinite] h-full rounded" />
+              <div className="w-1 bg-[#cc0000] animate-[pulse_0.5s_infinite] h-2/3 rounded" />
+              <div className="w-1 bg-[#cc0000] animate-[bounce_0.6s_infinite] h-full rounded" />
+              <div className="w-1 bg-[#cc0000] animate-[pulse_0.4s_infinite] h-1/2 rounded" />
+            </div>
+          ) : (
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              Audio engine: XTTS-v2 (24kHz Mono)
+            </p>
+          )}
+        </div>
       </div>
 
-      {/* Message History */}
+      {/* Message Stream */}
       <div className="flex-1 overflow-y-auto space-y-3 p-2 pr-3 scrollbar-thin scrollbar-thumb-gray-800">
         {messages.length === 0 && (
-          <div className="text-center py-12 text-gray-500 text-sm italic">
-            Start the conversation by sending a message to {formattedName}.
+          <div className="text-center py-16 text-gray-500 text-sm italic">
+            Send a message to start speaking with {formattedName}.
           </div>
         )}
 
@@ -188,7 +231,7 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
                   </>
                 ) : (
                   <>
-                    <span>▶</span> Play Voice Response
+                    <span>▶</span> Replay Audio
                   </>
                 )}
               </button>
@@ -205,18 +248,23 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
         <div ref={chatBottomRef} />
       </div>
 
-      {/* Input Form */}
+      {/* Input Form with Lock State */}
       <form onSubmit={handleSendMessage} className="mt-4 flex gap-2 pt-2 border-t border-gray-800">
         <input
           type="text"
           value={inputMessage}
           onChange={(e) => setInputMessage(e.target.value)}
-          placeholder={`Say something to ${formattedName}...`}
-          className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#cc0000] transition-colors"
+          disabled={loading || isSpeaking}
+          placeholder={
+            isSpeaking
+              ? `Listening to ${formattedName}...`
+              : `Say something to ${formattedName}...`
+          }
+          className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#cc0000] transition-colors disabled:opacity-50"
         />
         <button
           type="submit"
-          disabled={loading || !inputMessage.trim()}
+          disabled={loading || isSpeaking || !inputMessage.trim()}
           className="bg-[#990000] hover:bg-[#cc0000] text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Send
