@@ -8,6 +8,7 @@ interface Message {
   sender: 'user' | 'character' | 'system';
   text: string;
   audioUrl?: string;
+  isError?: boolean;
 }
 
 interface ChatWindowProps {
@@ -19,22 +20,39 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
   const [inputMessage, setInputMessage] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [playingAudioId, setPlayingAudioId] = useState<number | null>(null);
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
 
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
-  // Format display name from slug (e.g., "damon-salvatore" -> "Damon Salvatore")
   const formattedName = characterSlug
     .split('-')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 
-  // Auto-scroll to latest message
+  // Health check server connectivity
+  const checkBackendHealth = async () => {
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/characters/', {
+        method: 'GET',
+        signal: AbortSignal.timeout(3000),
+      });
+      setBackendOnline(res.ok);
+    } catch {
+      setBackendOnline(false);
+    }
+  };
+
+  useEffect(() => {
+    checkBackendHealth();
+    const interval = setInterval(checkBackendHealth, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  // Clean up audio on unmount
   useEffect(() => {
     return () => {
       if (activeAudioRef.current) {
@@ -71,29 +89,36 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
     };
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputMessage.trim() || loading || playingAudioId !== null) return;
+  const handleSendMessage = async (e?: React.FormEvent, overrideText?: string) => {
+    if (e) e.preventDefault();
+    const textToSend = overrideText || inputMessage;
 
-    const userText = inputMessage;
-    setInputMessage('');
+    if (!textToSend.trim() || loading || playingAudioId !== null) return;
 
-    const userMsg: Message = { id: Date.now(), sender: 'user', text: userText };
+    if (!overrideText) setInputMessage('');
+
+    const userMsg: Message = { id: Date.now(), sender: 'user', text: textToSend };
     setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout for XTTS synthesis
 
     try {
       const response = await fetch('http://127.0.0.1:8000/api/chat/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           character_slug: characterSlug,
-          message: userText,
+          message: textToSend,
         }),
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        throw new Error(`Server returned status ${response.status}`);
+        throw new Error(`Server status: ${response.status}`);
       }
 
       const data = await response.json();
@@ -111,15 +136,22 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
         playAudio(data.audio_url, botMsgId);
       }
     } catch (error: any) {
-      console.error('Chat error:', error);
+      clearTimeout(timeoutId);
+      const isTimeout = error.name === 'AbortError';
+      const errorMsg = isTimeout
+        ? 'Voice synthesis timed out (20s limit). Check Django server logs.'
+        : 'Connection lost. Ensure Django is running on port 8000.';
+
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now(),
           sender: 'system',
-          text: 'Failed to communicate with Django API. Ensure backend is running.',
+          text: errorMsg,
+          isError: true,
         },
       ]);
+      setBackendOnline(false);
     } finally {
       setLoading(false);
     }
@@ -129,7 +161,7 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
 
   return (
     <div className="bg-[#16161a] border border-gray-800 rounded-2xl p-6 shadow-2xl flex flex-col h-[700px] w-full text-left">
-      {/* Top Header Bar */}
+      {/* Top Header */}
       <div className="border-b border-gray-800 pb-4 mb-4 flex justify-between items-center">
         <div>
           <h2 className="text-xl font-bold text-white">
@@ -147,58 +179,38 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
         </Link>
       </div>
 
-      {/* Day 8 Visualizer Header Banner */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4 flex items-center gap-4">
-        {/* Dynamic Pulsing Ring around Avatar */}
-        <div className="relative flex items-center justify-center">
-          {isSpeaking && (
-            <>
-              <span className="absolute inline-flex h-14 w-14 rounded-full bg-[#cc0000] opacity-75 animate-ping" />
-              <span className="absolute inline-flex h-12 w-12 rounded-full bg-[#cc0000] opacity-40 animate-pulse" />
-            </>
-          )}
-          <div className="relative z-10 w-12 h-12 rounded-full bg-zinc-800 border-2 border-[#cc0000] flex items-center justify-center text-white font-bold text-lg overflow-hidden shadow-lg">
-            {formattedName.charAt(0)}
-          </div>
+      {/* Backend Health Status Banner */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <span
+            className={`w-3 h-3 rounded-full ${
+              backendOnline === true
+                ? 'bg-emerald-500 animate-pulse'
+                : backendOnline === false
+                ? 'bg-red-500'
+                : 'bg-amber-500 animate-ping'
+            }`}
+          />
+          <span className="text-xs text-gray-300 font-medium">
+            {backendOnline === true
+              ? 'Voice Pipeline Connected'
+              : backendOnline === false
+              ? 'Backend Offline'
+              : 'Checking API Status...'}
+          </span>
         </div>
 
-        {/* Real-time Status and Animated Audio Waves */}
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-2.5 h-2.5 rounded-full ${
-                isSpeaking
-                  ? 'bg-[#cc0000] animate-bounce'
-                  : loading
-                  ? 'bg-amber-500 animate-pulse'
-                  : 'bg-emerald-500'
-              }`}
-            />
-            <span className="text-xs font-medium text-gray-200">
-              {isSpeaking
-                ? `${formattedName} is speaking...`
-                : loading
-                ? 'Synthesizing voice & thoughts...'
-                : 'Call Connected'}
-            </span>
-          </div>
-
-          {isSpeaking ? (
-            <div className="flex items-end gap-1 h-3 mt-1.5">
-              <div className="w-1 bg-[#cc0000] animate-[ping_0.8s_infinite] h-full rounded" />
-              <div className="w-1 bg-[#cc0000] animate-[pulse_0.5s_infinite] h-2/3 rounded" />
-              <div className="w-1 bg-[#cc0000] animate-[bounce_0.6s_infinite] h-full rounded" />
-              <div className="w-1 bg-[#cc0000] animate-[pulse_0.4s_infinite] h-1/2 rounded" />
-            </div>
-          ) : (
-            <p className="text-[11px] text-gray-500 mt-0.5">
-              Audio engine: XTTS-v2 (24kHz Mono)
-            </p>
-          )}
-        </div>
+        {backendOnline === false && (
+          <button
+            onClick={checkBackendHealth}
+            className="text-xs text-amber-400 hover:text-amber-300 underline font-medium"
+          >
+            Retry Connection
+          </button>
+        )}
       </div>
 
-      {/* Message Stream */}
+      {/* Message History */}
       <div className="flex-1 overflow-y-auto space-y-3 p-2 pr-3 scrollbar-thin scrollbar-thumb-gray-800">
         {messages.length === 0 && (
           <div className="text-center py-16 text-gray-500 text-sm italic">
@@ -212,8 +224,10 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
             className={`max-w-[80%] p-3.5 rounded-xl text-sm leading-relaxed ${
               msg.sender === 'user'
                 ? 'ml-auto bg-[#990000] text-white rounded-tr-none'
+                : msg.isError
+                ? 'mx-auto bg-red-950/60 border border-red-800 text-red-300 text-xs text-center'
                 : msg.sender === 'system'
-                ? 'mx-auto bg-red-950/40 border border-red-800/50 text-red-300 text-xs text-center'
+                ? 'mx-auto bg-zinc-900 text-gray-400 text-xs text-center border border-zinc-800'
                 : 'mr-auto bg-zinc-900 text-gray-200 border border-zinc-800 rounded-tl-none'
             }`}
           >
@@ -242,14 +256,14 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
         {loading && (
           <div className="mr-auto bg-zinc-900 border border-zinc-800 p-3 rounded-xl rounded-tl-none text-xs text-gray-400 flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-[#cc0000] animate-ping" />
-            <span>{formattedName} is thinking & generating voice response...</span>
+            <span>{formattedName} is generating response & synthesizing voice...</span>
           </div>
         )}
         <div ref={chatBottomRef} />
       </div>
 
-      {/* Input Form with Lock State */}
-      <form onSubmit={handleSendMessage} className="mt-4 flex gap-2 pt-2 border-t border-gray-800">
+      {/* Input Form */}
+      <form onSubmit={(e) => handleSendMessage(e)} className="mt-4 flex gap-2 pt-2 border-t border-gray-800">
         <input
           type="text"
           value={inputMessage}
