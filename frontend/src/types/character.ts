@@ -7,4 +7,6 @@ export interface Character {
   avatar: string | null;
   voice_sample: string | null;
   is_active: boolean;
+  species?: string;
+  faction?: string;
 }
