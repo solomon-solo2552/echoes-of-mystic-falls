@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import AudioVisualizer from '@/components/AudioVisualizer';
 
 interface Message {
   id: number;
@@ -14,6 +15,13 @@ interface Message {
 interface ChatWindowProps {
   characterSlug: string;
 }
+
+const PRESET_PROMPTS = [
+  'Tell me a secret about Mystic Falls...',
+  'Who do you trust the most right now?',
+  'What is your biggest regret?',
+  'What are your plans for tonight?',
+];
 
 export default function ChatWindow({ characterSlug }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -148,7 +156,7 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
     setLoading(true);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout for XTTS synthesis
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
 
     try {
       const response = await fetch('http://127.0.0.1:8000/api/chat/', {
@@ -217,12 +225,17 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
             Persona: {characterSlug}
           </p>
         </div>
-        <Link
-          href="/"
-          className="px-3 py-1.5 bg-red-950/60 hover:bg-red-900 border border-red-800 text-red-200 text-xs font-semibold rounded-lg transition-colors"
-        >
-          🔴 End Call
-        </Link>
+
+        <div className="flex items-center gap-3">
+          <AudioVisualizer isSpeaking={isSpeaking} isGenerating={loading} />
+
+          <Link
+            href="/"
+            className="px-3 py-1.5 bg-red-950/60 hover:bg-red-900 border border-red-800 text-red-200 text-xs font-semibold rounded-lg transition-colors"
+          >
+            🔴 End Call
+          </Link>
+        </div>
       </div>
 
       {/* Backend Health Status Banner */}
@@ -259,8 +272,22 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
       {/* Message History */}
       <div className="flex-1 overflow-y-auto space-y-3 p-2 pr-3 scrollbar-thin scrollbar-thumb-gray-800">
         {messages.length === 0 && (
-          <div className="text-center py-16 text-gray-500 text-sm italic">
-            Click 🎤 to speak or type a message to start speaking with {formattedName}.
+          <div className="text-center py-12 px-4 my-auto">
+            <p className="text-gray-400 text-sm mb-4">
+              Click 🎤 to speak, type a message, or select a preset prompt to speak with {formattedName}:
+            </p>
+            <div className="flex flex-wrap justify-center gap-2 max-w-lg mx-auto">
+              {PRESET_PROMPTS.map((prompt, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSendMessage(undefined, prompt)}
+                  disabled={loading || isSpeaking}
+                  className="bg-zinc-900 hover:bg-zinc-800 text-gray-300 hover:text-white border border-zinc-800 rounded-xl px-3.5 py-2 text-xs transition-all text-left shadow-sm hover:border-[#cc0000]"
+                >
+                  💬 "{prompt}"
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
