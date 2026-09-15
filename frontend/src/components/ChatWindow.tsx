@@ -23,6 +23,8 @@ const PRESET_PROMPTS = [
   'What are your plans for tonight?',
 ];
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+
 export default function ChatWindow({ characterSlug }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState<string>('');
@@ -40,7 +42,7 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 
-  // Initialize Web Speech API
+  // Initialize Web Speech API with cleanup
   useEffect(() => {
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -69,6 +71,12 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
 
       recognitionRef.current = recognition;
     }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    };
   }, []);
 
   const toggleMic = () => {
@@ -87,7 +95,7 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
   // Health check server connectivity
   const checkBackendHealth = async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/characters/', {
+      const res = await fetch(`${API_BASE_URL}/api/characters/`, {
         method: 'GET',
         signal: AbortSignal.timeout(3000),
       });
@@ -126,7 +134,7 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
 
     const fullAudioUrl = audioUrl.startsWith('http')
       ? audioUrl
-      : `http://127.0.0.1:8000${audioUrl}`;
+      : `${API_BASE_URL}${audioUrl}`;
 
     const audio = new Audio(fullAudioUrl);
     activeAudioRef.current = audio;
@@ -141,6 +149,12 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
       setPlayingAudioId(null);
       activeAudioRef.current = null;
     };
+
+    audio.onerror = () => {
+      console.error('Failed to load audio resource');
+      setPlayingAudioId(null);
+      activeAudioRef.current = null;
+    };
   };
 
   const handleSendMessage = async (e?: React.FormEvent, overrideText?: string) => {
@@ -148,6 +162,10 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
     const textToSend = overrideText || inputMessage;
 
     if (!textToSend.trim() || loading || playingAudioId !== null) return;
+
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
 
     if (!overrideText) setInputMessage('');
 
@@ -159,7 +177,7 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
     const timeoutId = setTimeout(() => controller.abort(), 20000);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/chat/', {
+      const response = await fetch(`${API_BASE_URL}/api/chat/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
