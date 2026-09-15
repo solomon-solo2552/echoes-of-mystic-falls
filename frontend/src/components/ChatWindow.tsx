@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import Link from 'next/link';
 import AudioVisualizer from '@/components/AudioVisualizer';
+import CallSummaryModal from '@/components/CallSummaryModal';
 
 interface Message {
   id: number;
@@ -32,6 +32,9 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
   const [playingAudioId, setPlayingAudioId] = useState<number | null>(null);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [isListening, setIsListening] = useState<boolean>(false);
+  const [callDuration, setCallDuration] = useState<number>(0);
+  const [showSummaryModal, setShowSummaryModal] = useState<boolean>(false);
+  const [isCallActive, setIsCallActive] = useState<boolean>(true);
 
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
@@ -41,6 +44,32 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
     .split('-')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
+
+  // Call duration timer (active while in call)
+  useEffect(() => {
+    if (!isCallActive) return;
+    const timer = setInterval(() => {
+      setCallDuration((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isCallActive]);
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleEndCall = () => {
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+    }
+    if (recognitionRef.current && isListening) {
+      recognitionRef.current.stop();
+    }
+    setIsCallActive(false);
+    setShowSummaryModal(true);
+  };
 
   // Initialize Web Speech API with cleanup
   useEffect(() => {
@@ -161,7 +190,7 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
     if (e) e.preventDefault();
     const textToSend = overrideText || inputMessage;
 
-    if (!textToSend.trim() || loading || playingAudioId !== null) return;
+    if (!textToSend.trim() || loading || playingAudioId !== null || !isCallActive) return;
 
     if (isListening && recognitionRef.current) {
       recognitionRef.current.stop();
@@ -230,29 +259,42 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
   };
 
   const isSpeaking = playingAudioId !== null;
+  const userMessageCount = messages.filter((m) => m.sender === 'user').length;
 
   return (
-    <div className="bg-[#16161a] border border-gray-800 rounded-2xl p-6 shadow-2xl flex flex-col h-[700px] w-full text-left">
+    <div className="bg-[#16161a] border border-gray-800 rounded-2xl p-6 shadow-2xl flex flex-col h-[700px] w-full text-left relative">
       {/* Top Header */}
       <div className="border-b border-gray-800 pb-4 mb-4 flex justify-between items-center">
         <div>
-          <h2 className="text-xl font-bold text-white">
-            Call with <span className="text-[#cc0000]">{formattedName}</span>
-          </h2>
-          <p className="text-[#d4af37] text-xs uppercase tracking-wider mt-0.5">
-            Persona: {characterSlug}
-          </p>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-white">
+              Call with <span className="text-[#cc0000]">{formattedName}</span>
+            </h2>
+            <span className="px-2 py-0.5 bg-zinc-800 border border-zinc-700 text-xs font-mono text-emerald-400 rounded-md">
+              ⏱️ {formatDuration(callDuration)}
+            </span>
+          </div>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-[#d4af37] text-xs uppercase tracking-wider">
+              Persona: {characterSlug}
+            </p>
+            <span className="text-gray-600 text-xs">•</span>
+            <p className="text-gray-400 text-xs">
+              Exchanges: <span className="text-gray-200 font-semibold">{userMessageCount}</span>
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
           <AudioVisualizer isSpeaking={isSpeaking} isGenerating={loading} />
 
-          <Link
-            href="/"
+          <button
+            type="button"
+            onClick={handleEndCall}
             className="px-3 py-1.5 bg-red-950/60 hover:bg-red-900 border border-red-800 text-red-200 text-xs font-semibold rounded-lg transition-colors"
           >
             🔴 End Call
-          </Link>
+          </button>
         </div>
       </div>
 
@@ -299,7 +341,7 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
                 <button
                   key={idx}
                   onClick={() => handleSendMessage(undefined, prompt)}
-                  disabled={loading || isSpeaking}
+                  disabled={loading || isSpeaking || !isCallActive}
                   className="bg-zinc-900 hover:bg-zinc-800 text-gray-300 hover:text-white border border-zinc-800 rounded-xl px-3.5 py-2 text-xs transition-all text-left shadow-sm hover:border-[#cc0000]"
                 >
                   💬 "{prompt}"
@@ -358,7 +400,7 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
         <button
           type="button"
           onClick={toggleMic}
-          disabled={loading || isSpeaking}
+          disabled={loading || isSpeaking || !isCallActive}
           className={`px-3.5 py-2.5 rounded-lg border text-sm transition-all flex items-center gap-1.5 ${
             isListening
               ? 'bg-red-600 text-white border-red-500 animate-pulse'
@@ -373,9 +415,11 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
           type="text"
           value={inputMessage}
           onChange={(e) => setInputMessage(e.target.value)}
-          disabled={loading || isSpeaking}
+          disabled={loading || isSpeaking || !isCallActive}
           placeholder={
-            isSpeaking
+            !isCallActive
+              ? 'Call ended. Rate your experience below.'
+              : isSpeaking
               ? `Listening to ${formattedName}...`
               : isListening
               ? 'Listening to microphone...'
@@ -386,12 +430,21 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
 
         <button
           type="submit"
-          disabled={loading || isSpeaking || !inputMessage.trim()}
+          disabled={loading || isSpeaking || !inputMessage.trim() || !isCallActive}
           className="bg-[#990000] hover:bg-[#cc0000] text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Send
         </button>
       </form>
+
+      {/* Summary Modal */}
+      <CallSummaryModal
+        isOpen={showSummaryModal}
+        characterName={formattedName}
+        durationFormatted={formatDuration(callDuration)}
+        exchangeCount={userMessageCount}
+        onClose={() => setShowSummaryModal(false)}
+      />
     </div>
   );
 }
