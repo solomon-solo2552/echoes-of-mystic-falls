@@ -21,14 +21,60 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
   const [loading, setLoading] = useState<boolean>(false);
   const [playingAudioId, setPlayingAudioId] = useState<number | null>(null);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [isListening, setIsListening] = useState<boolean>(false);
 
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   const formattedName = characterSlug
     .split('-')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
+
+  // Initialize Web Speech API
+  useEffect(() => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => setIsListening(true);
+
+      recognition.onresult = (event: any) => {
+        const transcript = Array.from(event.results)
+          .map((result: any) => result[0].transcript)
+          .join('');
+        setInputMessage(transcript);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => setIsListening(false);
+
+      recognitionRef.current = recognition;
+    }
+  }, []);
+
+  const toggleMic = () => {
+    if (!recognitionRef.current) {
+      alert('Speech Recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.');
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      recognitionRef.current.start();
+    }
+  };
 
   // Health check server connectivity
   const checkBackendHealth = async () => {
@@ -214,7 +260,7 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
       <div className="flex-1 overflow-y-auto space-y-3 p-2 pr-3 scrollbar-thin scrollbar-thumb-gray-800">
         {messages.length === 0 && (
           <div className="text-center py-16 text-gray-500 text-sm italic">
-            Send a message to start speaking with {formattedName}.
+            Click 🎤 to speak or type a message to start speaking with {formattedName}.
           </div>
         )}
 
@@ -262,8 +308,22 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
         <div ref={chatBottomRef} />
       </div>
 
-      {/* Input Form */}
+      {/* Input Form with Microphone Toggle */}
       <form onSubmit={(e) => handleSendMessage(e)} className="mt-4 flex gap-2 pt-2 border-t border-gray-800">
+        <button
+          type="button"
+          onClick={toggleMic}
+          disabled={loading || isSpeaking}
+          className={`px-3.5 py-2.5 rounded-lg border text-sm transition-all flex items-center gap-1.5 ${
+            isListening
+              ? 'bg-red-600 text-white border-red-500 animate-pulse'
+              : 'bg-zinc-900 text-gray-300 border-zinc-800 hover:text-white hover:border-zinc-700 disabled:opacity-50'
+          }`}
+          title={isListening ? 'Stop Listening' : 'Start Voice Input'}
+        >
+          {isListening ? '🎙️ Listening...' : '🎤'}
+        </button>
+
         <input
           type="text"
           value={inputMessage}
@@ -272,10 +332,13 @@ export default function ChatWindow({ characterSlug }: ChatWindowProps) {
           placeholder={
             isSpeaking
               ? `Listening to ${formattedName}...`
+              : isListening
+              ? 'Listening to microphone...'
               : `Say something to ${formattedName}...`
           }
           className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#cc0000] transition-colors disabled:opacity-50"
         />
+
         <button
           type="submit"
           disabled={loading || isSpeaking || !inputMessage.trim()}
